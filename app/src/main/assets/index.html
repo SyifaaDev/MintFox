@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1011">
+<title>MintFox</title>
+<style>
+:root{
+  --bg:#0d1011;
+  --bg2:#14181a;
+  --surface:#1a1f21;
+  --surface2:#222829;
+  --line:#2a3133;
+  --text:#e8f1f0;
+  --muted:#8a9a99;
+  --accent:#2fe0c0;
+  --accent2:#3cc98f;
+  --grad:linear-gradient(135deg,#2fe0d4,#3cc98f);
+  --nav-h:64px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  background:radial-gradient(900px 500px at 50% -10%,#12302d33,transparent 70%),var(--bg);
+  color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  overflow:hidden;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+/* ---------- layout ---------- */
+.app{position:fixed;inset:0;display:flex;flex-direction:column}
+
+/* ---------- navbar / search wrapper ---------- */
+.top{
+  position:absolute;left:0;right:0;top:0;z-index:20;
+  display:flex;align-items:center;gap:10px;
+  padding:calc(10px + env(safe-area-inset-top)) 12px 10px 14px;
+  height:calc(var(--nav-h) + env(safe-area-inset-top));
+  pointer-events:none;
+}
+.top > *{pointer-events:auto}
+.mini-logo{width:34px;height:34px;flex:none;opacity:0;transform:scale(.6);transition:.35s}
+.menu-btn{
+  margin-left:auto;width:42px;height:42px;border-radius:12px;flex:none;
+  display:grid;place-items:center;transition:background .2s;
+}
+.menu-btn:active{background:var(--surface2)}
+.menu-btn svg{width:22px;height:22px;stroke:var(--text)}
+
+/* ---------- home ---------- */
+.home{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:0 20px 8vh;text-align:center;transition:opacity .3s,transform .3s;
+}
+.logo{width:min(46vw,190px);height:auto;filter:drop-shadow(0 10px 30px #2fe0c022)}
+.brand{
+  margin-top:10px;font-size:34px;font-weight:800;letter-spacing:-.5px;
+  background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.tag{margin-top:4px;color:var(--muted);font-size:13px}
+.spacer-search{height:92px} /* ruang untuk search bar yang melayang di bawah logo */
+
+/* ---------- search box (satu elemen, pindah posisi) ---------- */
+.search{
+  position:absolute;z-index:30;left:50%;
+  top:calc(50% + 70px);
+  transform:translate(-50%,0);
+  width:min(92vw,640px);
+  transition:top .38s cubic-bezier(.2,.8,.2,1),width .38s cubic-bezier(.2,.8,.2,1),border-radius .3s;
+}
+.box{
+  display:flex;align-items:center;gap:8px;
+  background:var(--surface);border:1px solid var(--line);border-radius:28px;
+  padding:0 8px 0 16px;height:52px;
+  transition:border-color .2s,box-shadow .2s,background .2s;
+}
+.box:focus-within{border-color:#2fe0c066;box-shadow:0 0 0 4px #2fe0c014,0 10px 40px #00000066;background:var(--surface2)}
+.box svg.ic{width:20px;height:20px;stroke:var(--muted);flex:none}
+.box input{
+  flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);
+  font-size:16px;height:100%;
+}
+.box input::placeholder{color:var(--muted)}
+.icon-btn{width:38px;height:38px;border-radius:50%;display:none;place-items:center;flex:none}
+.icon-btn:active{background:var(--line)}
+.icon-btn svg{width:18px;height:18px;stroke:var(--muted)}
+.go{
+  width:40px;height:40px;border-radius:50%;background:var(--grad);flex:none;
+  display:grid;place-items:center;
+}
+.go svg{width:18px;height:18px;stroke:#05221e}
+
+/* saran */
+.sugg{
+  margin-top:8px;background:var(--surface);border:1px solid var(--line);border-radius:20px;
+  overflow:hidden;display:none;max-height:calc(100vh - 150px);overflow-y:auto;
+  box-shadow:0 20px 50px #00000080;
+}
+.sugg.show{display:block}
+.sugg li{
+  list-style:none;display:flex;align-items:center;gap:12px;
+  padding:13px 16px;font-size:15px;cursor:pointer;
+}
+.sugg li svg{width:17px;height:17px;stroke:var(--muted);flex:none}
+.sugg li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sugg li b{color:var(--accent);font-weight:600}
+.sugg li.active,.sugg li:active{background:var(--surface2)}
+.sugg li .fill{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;flex:none}
+.sugg li .fill:active{background:var(--line)}
+.sugg .hdr{padding:10px 16px 4px;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+
+/* ---------- mode navbar (saat fokus/mengetik) ---------- */
+.app.nav .search{
+  top:calc(env(safe-area-inset-top) + 10px);
+  width:calc(100vw - 24px - 54px - 40px); /* sisakan ruang logo + tombol menu */
+  left:calc(14px + 44px);
+  transform:none;
+  max-width:none;
+}
+.app.nav .box{height:44px;border-radius:22px}
+.app.nav .go{width:34px;height:34px}
+.app.nav .icon-btn.clear{display:grid}
+.app.nav .mini-logo{opacity:1;transform:none}
+.app.nav .home{opacity:0;transform:translateY(-14px);pointer-events:none}
+.app.nav::before{
+  content:"";position:absolute;left:0;right:0;top:0;z-index:10;
+  height:calc(var(--nav-h) + env(safe-area-inset-top));
+  background:var(--bg2);border-bottom:1px solid var(--line);
+}
+@media(min-width:720px){
+  .app.nav .search{width:min(640px,calc(100vw - 200px));left:50%;transform:translateX(-50%)}
+}
+
+/* ---------- riwayat di bawah search (home) ---------- */
+.chips{
+  position:absolute;left:0;right:0;bottom:calc(22px + env(safe-area-inset-bottom));
+  display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 16px;
+  transition:opacity .3s;
+}
+.app.nav .chips{opacity:0;pointer-events:none}
+.chip{
+  background:var(--surface);border:1px solid var(--line);border-radius:999px;
+  padding:8px 14px;font-size:13px;color:var(--muted);
+}
+.chip:active{color:var(--accent);border-color:#2fe0c055}
+
+/* ---------- sidebar kanan ---------- */
+.scrim{
+  position:fixed;inset:0;background:#000a;opacity:0;pointer-events:none;
+  transition:opacity .3s;z-index:40;
+}
+.side{
+  position:fixed;top:0;right:0;bottom:0;width:min(82vw,320px);z-index:50;
+  background:var(--bg2);border-left:1px solid var(--line);
+  transform:translateX(102%);transition:transform .32s cubic-bezier(.2,.8,.2,1);
+  display:flex;flex-direction:column;
+  padding:calc(18px + env(safe-area-inset-top)) 0 calc(14px + env(safe-area-inset-bottom));
+}
+.open .side{transform:none}
+.open .scrim{opacity:1;pointer-events:auto}
+.side-head{display:flex;align-items:center;gap:10px;padding:0 18px 16px;border-bottom:1px solid var(--line)}
+.side-head svg{width:34px;height:34px}
+.side-head strong{font-size:18px}
+.side-head small{display:block;color:var(--muted);font-size:12px}
+.side nav{padding:10px 10px;flex:1;overflow-y:auto}
+.side nav h4{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);padding:14px 10px 6px;font-weight:600}
+.item{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  padding:12px 10px;border-radius:12px;font-size:15px;
+}
+.item:active{background:var(--surface2)}
+.item svg{width:19px;height:19px;stroke:var(--accent);flex:none}
+.item span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item.hist svg{stroke:var(--muted)}
+.empty{padding:6px 10px;color:var(--muted);font-size:13px}
+.side-foot{padding:10px 18px 0;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+
+svg{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- navbar -->
+  <header class="top">
+    <svg class="mini-logo" viewBox="0 0 120 120"><use href="#fox"/></svg>
+    <button class="menu-btn" id="menuBtn" aria-label="Menu">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </header>
+
+  <!-- home -->
+  <main class="home" id="home">
+    <svg class="logo" viewBox="0 0 120 120"><use href="#fox"/></svg>
+    <div class="brand">MintFox</div>
+    <div class="tag">Cari apa saja, tetap di sini.</div>
+    <div class="spacer-search"></div>
+  </main>
+
+  <!-- search -->
+  <section class="search" id="search">
+    <form class="box" id="form" autocomplete="off">
+      <svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="text" inputmode="search" enterkeyhint="search"
+             placeholder="Cari di Google atau ketik URL"
+             autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Cari">
+      <button type="button" class="icon-btn clear" id="clear" aria-label="Hapus">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <button type="submit" class="go" aria-label="Cari">
+        <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </form>
+    <ul class="sugg" id="sugg"></ul>
+  </section>
+
+  <div class="chips" id="chips"></div>
+</div>
+
+<!-- sidebar kanan -->
+<div class="scrim" id="scrim"></div>
+<aside class="side" id="side" aria-label="Sidebar">
+  <div class="side-head">
+    <svg viewBox="0 0 120 120"><use href="#fox"/></svg>
+    <div><strong>MintFox</strong><small>v1.0.0</small></div>
+  </div>
+  <nav>
+    <h4>Pintasan</h4>
+    <button class="item" data-go="https://www.google.com/"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span>Google</span></button>
+    <button class="item" data-go="https://www.google.com/imghp"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m21 16-5-5-8 9"/></svg><span>Gambar</span></button>
+    <button class="item" data-go="https://news.google.com/"><svg viewBox="0 0 24 24"><path d="M5 4h12a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2zM9 8h6M9 12h6M9 16h4"/></svg><span>Berita</span></button>
+    <button class="item" data-go="https://maps.google.com/"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg><span>Maps</span></button>
+    <button class="item" data-go="https://translate.google.com/"><svg viewBox="0 0 24 24"><path d="M4 5h9M8.5 3v2M6 5c1 4 3 7 6 9M12 5c-1 4-3 7-7 9M13 20l4-9 4 9M14.5 17h5"/></svg><span>Terjemahan</span></button>
+
+    <h4>Riwayat</h4>
+    <div id="hist"></div>
+  </nav>
+  <div class="side-foot">
+    <button class="item" id="clearHist"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg><span>Hapus riwayat</span></button>
+  </div>
+</aside>
+
+<!-- logo rubah di atas daun mint -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="gLeaf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#34e8d8"/><stop offset="1" stop-color="#2fb67a"/>
+    </linearGradient>
+    <g id="fox" stroke="none">
+      <!-- daun -->
+      <path d="M8 84C8 46 38 22 112 20c0 44-30 74-80 72-10-.4-18-3-24-8z" fill="url(#gLeaf)"/>
+      <path d="M14 86C40 66 68 46 104 26" stroke="#1b8f6c" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <path d="M40 66l-8-3M56 54l-8-6M72 44l-6-7" stroke="#1b8f6c" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <!-- ekor -->
+      <path d="M16 72C6 62 8 46 24 44c10-1 14 8 12 16-1 6-6 12-20 12z" fill="#ff8a3d"/>
+      <path d="M10 56c2-8 8-11 14-11-4 3-5 8-5 12z" fill="#fff"/>
+      <!-- badan tiduran -->
+      <path d="M22 78c0-12 14-20 34-20 18 0 30 5 34 14 2 5-2 9-8 9H30c-6 0-8-1-8-3z" fill="#ff7a2f"/>
+      <!-- kaki depan -->
+      <path d="M62 80c4-2 14-2 24 0 4 1 4 5-1 5H62c-4 0-4-4 0-5z" fill="#ffa15e"/>
+      <!-- kepala -->
+      <path d="M78 56c0-7 6-12 14-12s13 4 14 11c1 6-4 13-14 13-8 0-14-5-14-12z" fill="#ff7a2f"/>
+      <!-- telinga -->
+      <path d="M82 49l-2-13 11 7z" fill="#ff7a2f"/>
+      <path d="M99 45l8-9 2 14z" fill="#ff7a2f"/>
+      <path d="M84 46l-1-6 5 3z" fill="#2b2b2b"/>
+      <path d="M102 44l4-4 1 6z" fill="#2b2b2b"/>
+      <!-- moncong -->
+      <path d="M92 60c6 0 14 3 14 7-3 3-9 4-14 4s-10-3-6-8z" fill="#fff"/>
+      <!-- mata tertutup -->
+      <path d="M86 56q3 2 6 0M98 56q3 2 6 0" stroke="#2b2b2b" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <circle cx="108" cy="65" r="2" fill="#2b2b2b"/>
+    </g>
+  </defs>
+</svg>
+
+<script>
+(function(){
+  'use strict';
+  var $ = function(id){return document.getElementById(id)};
+  var app=$('app'), q=$('q'), sugg=$('sugg'), form=$('form');
+  var SEARCH='https://www.google.com/search?q=';
+  var items=[], active=-1, timer=null, seq=0;
+
+  /* ---------- storage aman (tidak crash kalau diblokir) ---------- */
+  function load(){ try{ return JSON.parse(localStorage.getItem('mf_hist')||'[]') }catch(e){ return [] } }
+  function save(a){ try{ localStorage.setItem('mf_hist',JSON.stringify(a.slice(0,30))) }catch(e){} }
+  function addHist(t){
+    var a=load().filter(function(x){return x!==t}); a.unshift(t); save(a); renderHist();
+  }
+
+  /* ---------- helper ---------- */
+  function esc(s){return s.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function isUrl(s){
+    s=s.trim();
+    if(/\s/.test(s)) return false;
+    return /^https?:\/\//i.test(s) || /^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?(\/.*)?$/i.test(s);
+  }
+  function toUrl(s){ return /^https?:\/\//i.test(s)?s:'https://'+s }
+  function go(text){
+    text=(text||'').trim(); if(!text) return;
+    if(isUrl(text)){ location.href=toUrl(text); return; }
+    addHist(text);
+    location.href=SEARCH+encodeURIComponent(text);
+  }
+
+  /* ---------- mode navbar ---------- */
+  function setNav(on){ app.classList.toggle('nav',on); if(!on){hideSugg()} }
+  q.addEventListener('focus',function(){ setNav(true); renderSugg(); });
+  q.addEventListener('blur',function(){ setTimeout(function(){ if(document.activeElement!==q && !q.value) setNav(false) },180) });
+
+  /* ---------- saran (JSONP ke Google Suggest, tanpa CORS) ---------- */
+  function fetchSugg(term){
+    var my=++seq, cb='__mf'+my, s=document.createElement('script');
+    var done=false;
+    function clean(){ try{delete window[cb]}catch(e){window[cb]=undefined} if(s.parentNode) s.parentNode.removeChild(s) }
+    window[cb]=function(r){
+      done=true; clean();
+      if(my!==seq) return;
+      var list=(r&&r[1])||[];
+      list=list.map(function(x){return Array.isArray(x)?x[0]:x}).filter(Boolean);
+      items=list.slice(0,8).map(function(t){return {t:t,type:'s'}});
+      if(isUrl(term)) items.unshift({t:term,type:'u'});
+      render();
+    };
+    s.onerror=function(){ clean(); if(my===seq){ items=isUrl(term)?[{t:term,type:'u'}]:[]; render(); } };
+    s.src='https://suggestqueries.google.com/complete/search?client=youtube&hl=id&q='+encodeURIComponent(term)+'&jsonp='+cb;
+    document.head.appendChild(s);
+    setTimeout(function(){ if(!done) clean() },6000);
+  }
+
+  function renderSugg(){
+    var v=q.value.trim();
+    if(!v){
+      var h=load().slice(0,6);
+      items=h.map(function(t){return {t:t,type:'h'}});
+      render(); return;
+    }
+    clearTimeout(timer);
+    timer=setTimeout(function(){ fetchSugg(v) },120);
+  }
+
+  var ICON={
+    s:'<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+    h:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    u:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>'
+  };
+  function render(){
+    active=-1;
+    if(!items.length){ hideSugg(); return; }
+    var v=q.value.trim(), lv=v.toLowerCase(), html='';
+    if(!v) html+='<li class="hdr" style="cursor:default">Terakhir dicari</li>';
+    items.forEach(function(it,i){
+      var label=esc(it.t);
+      if(it.type==='s' && lv && it.t.toLowerCase().indexOf(lv)===0){
+        label=esc(it.t.slice(0,v.length))+'<b>'+esc(it.t.slice(v.length))+'</b>';
+      }
+      if(it.type==='u') label='Buka <b>'+esc(it.t)+'</b>';
+      html+='<li data-i="'+i+'">'+ICON[it.type]+'<span>'+label+'</span>'+
+        (it.type!=='u'?'<button type="button" class="fill" data-fill="'+i+'" aria-label="Isi"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:var(--muted)"><path d="M7 17 17 7M9 7h8v8"/></svg></button>':'')+
+        '</li>';
+    });
+    sugg.innerHTML=html; sugg.classList.add('show');
+  }
+  function hideSugg(){ sugg.classList.remove('show'); sugg.innerHTML=''; }
+
+  sugg.addEventListener('mousedown',function(e){ e.preventDefault() });
+  sugg.addEventListener('click',function(e){
+    var f=e.target.closest('[data-fill]');
+    if(f){ q.value=items[+f.dataset.fill].t; q.focus(); renderSugg(); return; }
+    var li=e.target.closest('li[data-i]');
+    if(li) go(items[+li.dataset.i].t);
+  });
+
+  q.addEventListener('input',renderSugg);
+  q.addEventListener('keydown',function(e){
+    var lis=sugg.querySelectorAll('li[data-i]');
+    if(!lis.length) return;
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+      e.preventDefault();
+      active=(active+(e.key==='ArrowDown'?1:-1)+lis.length)%lis.length;
+      lis.forEach(function(l,i){l.classList.toggle('active',i===active)});
+      q.value=items[active].t;
+    }
+  });
+  form.addEventListener('submit',function(e){ e.preventDefault(); q.blur(); go(q.value) });
+  $('clear').addEventListener('click',function(){ q.value=''; q.focus(); renderSugg() });
+
+  /* ---------- riwayat / chip ---------- */
+  function renderHist(){
+    var a=load(), box=$('hist'), chips=$('chips');
+    box.innerHTML = a.length ? a.slice(0,15).map(function(t){
+      return '<button class="item hist" data-q="'+esc(t)+'">'+ICON.h+'<span>'+esc(t)+'</span></button>';
+    }).join('') : '<div class="empty">Belum ada riwayat.</div>';
+    var base=['cuaca hari ini','berita terbaru','resep masakan','tempat makan terdekat'];
+    var src=a.length?a.slice(0,4):base;
+    chips.innerHTML=src.map(function(t){return '<button class="chip" data-q="'+esc(t)+'">'+esc(t)+'</button>'}).join('');
+  }
+  document.addEventListener('click',function(e){
+    var c=e.target.closest('[data-q]'); if(c){ closeSide(); go(c.dataset.q); return; }
+    var g=e.target.closest('[data-go]'); if(g){ location.href=g.dataset.go; }
+  });
+  $('clearHist').addEventListener('click',function(){ save([]); renderHist() });
+
+  /* ---------- sidebar ---------- */
+  function openSide(){ document.body.classList.add('open') }
+  function closeSide(){ document.body.classList.remove('open') }
+  $('menuBtn').addEventListener('click',openSide);
+  $('scrim').addEventListener('click',closeSide);
+  // geser ke kanan untuk menutup
+  var sx=null;
+  $('side').addEventListener('touchstart',function(e){sx=e.touches[0].clientX},{passive:true});
+  $('side').addEventListener('touchend',function(e){
+    if(sx!==null && e.changedTouches[0].clientX-sx>60) closeSide(); sx=null;
+  },{passive:true});
+  // geser dari tepi kanan untuk membuka
+  document.addEventListener('touchstart',function(e){
+    var x=e.touches[0].clientX; sx = (window.innerWidth-x<20)? x : null; if(sx!==null) window.__edge=true;
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(window.__edge && sx!==null && sx-e.changedTouches[0].clientX>50) openSide();
+    window.__edge=false;
+  },{passive:true});
+
+  // tombol back: tutup sidebar / keluar mode navbar dulu
+  window.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){ closeSide(); q.blur(); if(!q.value) setNav(false); }
+  });
+
+  renderHist();
+})();
+</script>
+</body>
+</html>
