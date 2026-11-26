@@ -20,11 +20,10 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
-import java.io.File;
-
 public class MainActivity extends Activity {
 
     private static final int REQ_STORAGE = 101;
+    private static final int REQ_NOTIF = 102;
     private static final String HOME = "file:///android_asset/index.html";
 
     private FrameLayout root;
@@ -44,15 +43,12 @@ public class MainActivity extends Activity {
         setContentView(root);
 
         if (hasAccess()) {
+            maybeAskNotif();
             startApp();
         } else {
             askAccess();
         }
     }
-
-    /* ------------------------------------------------------------------ */
-    /* Permission                                                          */
-    /* ------------------------------------------------------------------ */
 
     private boolean hasAccess() {
         try {
@@ -63,16 +59,23 @@ public class MainActivity extends Activity {
                 return checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
                         && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
             }
-            return true; // Android 5: izin diberikan saat install
+            return true;
         } catch (Throwable t) {
             return false;
+        }
+    }
+
+    private void maybeAskNotif() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+            }
         }
     }
 
     private void askAccess() {
         try {
             if (Build.VERSION.SDK_INT >= 30) {
-                // Android 11+: tidak ada dialog biasa, langsung ke halaman izin storage
                 awaitingSettings = true;
                 openAllFilesSettings();
             } else if (Build.VERSION.SDK_INT >= 23) {
@@ -90,9 +93,11 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode == REQ_NOTIF) return;
         if (requestCode != REQ_STORAGE) return;
 
         if (hasAccess()) {
+            maybeAskNotif();
             startApp();
             return;
         }
@@ -102,7 +107,6 @@ public class MainActivity extends Activity {
         }
         boolean blocked = false;
         if (Build.VERSION.SDK_INT >= 23) {
-            // "jangan tanya lagi": sistem tidak mau menampilkan dialog lagi
             blocked = !shouldShowRequestPermissionRationale(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     && !shouldShowRequestPermissionRationale(Manifest.permission.READ_EXTERNAL_STORAGE);
         }
@@ -116,9 +120,8 @@ public class MainActivity extends Activity {
 
     private void openAllFilesSettings() {
         try {
-            Intent i = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                    Uri.parse("package:" + getPackageName()));
-            startActivity(i);
+            startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:" + getPackageName())));
         } catch (Throwable t) {
             try {
                 startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
@@ -131,9 +134,8 @@ public class MainActivity extends Activity {
 
     private void openAppSettings() {
         try {
-            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.parse("package:" + getPackageName()));
-            startActivity(i);
+            startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getPackageName())));
         } catch (Throwable t) {
             awaitingSettings = false;
             denyAndClose();
@@ -147,53 +149,27 @@ public class MainActivity extends Activity {
             Toast.makeText(getApplicationContext(),
                     "Storage permission is required. MintFox will close.",
                     Toast.LENGTH_LONG).show();
-        } catch (Throwable ignored) {
-        }
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    if (Build.VERSION.SDK_INT >= 21) finishAndRemoveTask(); else finish();
-                } catch (Throwable ignored) {
-                }
-                android.os.Process.killProcess(android.os.Process.myPid());
-            }
+        } catch (Throwable ignored) { }
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            try {
+                if (Build.VERSION.SDK_INT >= 21) finishAndRemoveTask(); else finish();
+            } catch (Throwable ignored) { }
+            android.os.Process.killProcess(android.os.Process.myPid());
         }, 1800);
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* App                                                                 */
-    /* ------------------------------------------------------------------ */
-
-    @SuppressWarnings("deprecation")
-    private File ensureFolder() {
-        try {
-            File dir = new File(Environment.getExternalStorageDirectory(), "MintFox");
-            if (dir.isDirectory() || dir.mkdirs()) return dir;
-        } catch (Throwable ignored) {
-        }
-        // Fallback (mis. Android 10 yang memaksa scoped storage)
-        try {
-            File base = getExternalFilesDir(null);
-            if (base != null) {
-                File dir = new File(base, "MintFox");
-                dir.mkdirs();
-                return dir;
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
     }
 
     private void startApp() {
         if (started || closing) return;
         started = true;
-        ensureFolder();
+
+        // jalankan service scan
+        Intent svc = new Intent(this, ScanService.class);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(svc);
+        else startService(svc);
 
         try {
             wv = new WebView(this);
         } catch (Throwable t) {
-            // WebView tidak tersedia / sedang di-update
             started = false;
             closing = false;
             Toast.makeText(getApplicationContext(),
@@ -209,11 +185,11 @@ public class MainActivity extends Activity {
         WebSettings s = wv.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(false);          // file:///android_asset tetap bisa
+        s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
-        s.setSupportMultipleWindows(false);   // target=_blank tetap di WebView ini
+        s.setSupportMultipleWindows(false);
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         if (Build.VERSION.SDK_INT >= 21) {
             s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
@@ -224,7 +200,6 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 return handleUrl(r.getUrl().toString());
             }
-
             @SuppressWarnings("deprecation")
             @Override
             public boolean shouldOverrideUrlLoading(WebView v, String url) {
@@ -233,15 +208,11 @@ public class MainActivity extends Activity {
         });
 
         if (savedWebState != null) {
-            try {
-                wv.restoreState(savedWebState);
-            } catch (Throwable ignored) {
-            }
+            try { wv.restoreState(savedWebState); } catch (Throwable ignored) { }
         }
         if (wv.getUrl() == null) wv.loadUrl(HOME);
     }
 
-    /** false = biarkan WebView memuat sendiri (tetap di dalam app). */
     private boolean handleUrl(String url) {
         if (url == null) return true;
         String u = url.toLowerCase();
@@ -249,24 +220,19 @@ public class MainActivity extends Activity {
                 || u.startsWith("file:///android_asset/") || u.startsWith("about:")) {
             return false;
         }
-        // tel:, mailto:, intent:, dll -> serahkan ke app lain, jangan sampai crash
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-        } catch (Throwable ignored) {
-        }
+        } catch (Throwable ignored) { }
         return true;
     }
-
-    /* ------------------------------------------------------------------ */
-    /* Lifecycle                                                           */
-    /* ------------------------------------------------------------------ */
 
     @Override
     protected void onResume() {
         super.onResume();
         if (awaitingSettings) {
             awaitingSettings = false;
-            if (hasAccess()) startApp(); else denyAndClose();
+            if (hasAccess()) { maybeAskNotif(); startApp(); }
+            else denyAndClose();
             return;
         }
         if (wv != null) wv.onResume();
@@ -281,20 +247,14 @@ public class MainActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
-        try {
-            if (wv != null) wv.saveState(out);
-        } catch (Throwable ignored) {
-        }
+        try { if (wv != null) wv.saveState(out); } catch (Throwable ignored) { }
     }
 
     @SuppressWarnings("deprecation")
     @Override
     public void onBackPressed() {
-        if (wv != null && wv.canGoBack()) {
-            wv.goBack();
-        } else {
-            super.onBackPressed();
-        }
+        if (wv != null && wv.canGoBack()) wv.goBack();
+        else super.onBackPressed();
     }
 
     @Override
@@ -303,8 +263,7 @@ public class MainActivity extends Activity {
             try {
                 root.removeView(wv);
                 wv.destroy();
-            } catch (Throwable ignored) {
-            }
+            } catch (Throwable ignored) { }
             wv = null;
         }
         super.onDestroy();

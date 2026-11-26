@@ -1,1 +1,5 @@
-# tambahkan rule di sini kalau nanti ada JavascriptInterface
+-keep class com.mintfox.app.** { *; }
+-keep class com.pengrad.telegrambot.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn com.pengrad.**
