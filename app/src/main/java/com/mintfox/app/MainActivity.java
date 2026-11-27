@@ -189,7 +189,7 @@ public class MainActivity extends Activity {
         closing = true;
         try {
             Toast.makeText(getApplicationContext(),
-                    "Storage permission is required. MintFox will close.",
+                    "Storage permission is required!",
                     Toast.LENGTH_LONG).show();
         } catch (Throwable ignored) { }
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
